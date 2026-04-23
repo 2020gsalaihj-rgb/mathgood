@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>數學小尖兵 - 可愛強化版</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Microsoft JhengHei', sans-serif; background-color: #e8f5e9; touch-action: none; }
+        
+        /* UI 層設定 */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column;
+            justify-content: space-between; padding: 20px; box-sizing: border-box;
+            color: #2e7d32; user-select: none; z-index: 10;
+        }
+
+        .hud-header { display: flex; justify-content: space-between; align-items: center; }
+        .hud-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 4px solid #81c784;
+            padding: 10px 20px; border-radius: 20px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-label { font-size: 14px; font-weight: bold; color: #4caf50; }
+        .stat-value { font-size: 24px; font-weight: 900; }
+        #score-val { color: #f9a825; }
+        #health-val { color: #e57373; }
+
+        /* 虛擬搖桿 */
+        #joystick-wrapper {
+            position: absolute; bottom: 50px; left: 50px;
+            width: 120px; height: 120px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%; border: 4px solid #a5d6a7;
+            pointer-events: auto; display: none;
+        }
+        #joystick-stick {
+            position: absolute; top: 50%; left: 50%;
+            width: 50px; height: 50px;
+            background: #66bb6a; border-radius: 50%; 
+            transform: translate(-50%, -50%);
+            box-shadow: 0 4px 0 #388e3c;
+        }
+
+        /* 準心 */
+        .crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 30px; height: 30px; transform: translate(-50%, -50%);
+            pointer-events: none; display: none;
+        }
+        .crosshair::before, .crosshair::after { content: ''; position: absolute; background: #4caf50; border-radius: 2px; }
+        .crosshair::before { top: 14px; left: 0; width: 30px; height: 3px; }
+        .crosshair::after { top: 0; left: 14px; width: 3px; height: 30px; }
+
+        /* 遮罩介面 */
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #f1f8e9 0%, #c8e6c9 100%);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 2000; pointer-events: auto;
+        }
+
+        .modal {
+            background: white; border: 8px solid #a5d6a7;
+            padding: 30px; border-radius: 40px;
+            text-align: center; max-width: 450px; width: 85%;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+        }
+
+        h1 { color: #2e7d32; font-size: 42px; margin: 0 0 10px 0; text-shadow: 2px 2px 0px #fff; }
+        .modal p { color: #558b2f; font-size: 18px; line-height: 1.6; margin-bottom: 25px; }
+
+        .mode-selection { display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }
+        
+        .mode-btn {
+            background: #f1f8e9; border: 4px solid #81c784;
+            color: #2e7d32; padding: 15px; border-radius: 25px;
+            cursor: pointer; transition: all 0.2s; width: 150px;
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            font-weight: bold;
+        }
+        .mode-btn:hover { background: #c8e6c9; transform: translateY(-5px); }
+
+        /* 浮動訊息 */
+        #msg-flash {
+            position: absolute; top: 40%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px; font-weight: 900;
+            pointer-events: none; opacity: 0;
+            z-index: 500; -webkit-text-stroke: 2px white;
+            transition: transform 0.3s ease-out, opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div class="hud-header">
+            <div class="hud-card">
+                <div class="stat-label">🌟 能量生命</div>
+                <div id="health-val" class="stat-value">100%</div>
+            </div>
+            <div class="hud-card">
+                <div class="stat-label">🏆 學習積分</div>
+                <div id="score-val" class="stat-value">0 / 50</div>
+            </div>
+        </div>
+        <div id="msg-flash"></div>
+        <div class="crosshair" id="main-crosshair"></div>
+        <div id="joystick-wrapper"><div id="joystick-stick"></div></div>
+    </div>
+
+    <div id="start-screen" class="overlay">
+        <div class="modal">
+            <h1>🌈 數學小尖兵</h1>
+            <p>累積 50 分就能過關！<br>點擊機器人身上正確的<b>黃色答案按鈕</b></p>
+            <div class="mode-selection">
+                <div class="mode-btn" onclick="startGame('pc')">
+                    <span style="font-size: 40px;">⌨️</span><span>電腦遊玩</span>
+                </div>
+                <div class="mode-btn" onclick="startGame('mobile')">
+                    <span style="font-size: 40px;">📱</span><span>手機遊玩</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="end-screen" class="overlay" style="display:none;">
+        <div class="modal">
+            <h1 id="end-title">遊戲結束</h1>
+            <p id="end-msg"></p>
+            <button style="background:#4caf50; border:none; padding:15px 40px; font-size: 20px; color:white; border-radius:30px; cursor:pointer;" onclick="location.reload()">再玩一次 🐾</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // 音效模組
+        const Sfx = {
+            ctx: null,
+            init() { if(!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); },
+            play(freq, type='sine', dur=0.1) {
+                if(!this.ctx) return;
+                const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+                o.type = type; o.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                g.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+                o.connect(g); g.connect(this.ctx.destination);
+                o.start(); o.stop(this.ctx.currentTime + dur);
+            }
+        };
+
+        let scene, camera, renderer, clock;
+        let isRunning = false, controlType = 'pc';
+        let score = 0, health = 100, robots = [], spawnTimer = 0;
+        let moveF = false, moveB = false, moveL = false, moveR = false;
+        let joyData = { x: 0, y: 0 }, joyActive = false;
+        let rotateTouch = { active: false, x: 0, y: 0 };
+        const TARGET = 50;
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf1f8e9);
+            scene.fog = new THREE.Fog(0xf1f8e9, 5, 40);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1.6, 10);
+
+            const light = new THREE.AmbientLight(0xffffff, 0.8); scene.add(light);
+            const sun = new THREE.DirectionalLight(0xffffff, 0.5); sun.position.set(5, 10, 5); scene.add(sun);
+
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0xa5d6a7 }));
+            floor.rotation.x = -Math.PI/2; scene.add(floor);
+            scene.add(new THREE.GridHelper(40, 20, 0x81c784, 0x81c784));
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+            clock = new THREE.Clock();
+
+            setupControls();
+        }
+
+        function setupControls() {
+            window.addEventListener('keydown', e => { if(e.code==='KeyW') moveF=true; if(e.code==='KeyS') moveB=true; if(e.code==='KeyA') moveL=true; if(e.code==='KeyD') moveR=true; });
+            window.addEventListener('keyup', e => { if(e.code==='KeyW') moveF=false; if(e.code==='KeyS') moveB=false; if(e.code==='KeyA') moveL=false; if(e.code==='KeyD') moveR=false; });
+
+            document.addEventListener('mousemove', e => {
+                if(isRunning && controlType==='pc' && document.pointerLockElement) {
+                    camera.rotation.y -= e.movementX * 0.003;
+                    camera.rotation.x -= e.movementY * 0.003;
+                    camera.rotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, camera.rotation.x));
+                    camera.rotation.order = 'YXZ';
+                }
+            });
+
+            document.addEventListener('mousedown', () => { if(isRunning && controlType==='pc' && document.pointerLockElement) shoot(new THREE.Vector2(0,0)); });
+
+            // 手機搖桿邏輯
+            const jw = document.getElementById('joystick-wrapper'), js = document.getElementById('joystick-stick');
+            jw.addEventListener('touchstart', e => { e.preventDefault(); joyActive = true; });
+            jw.addEventListener('touchmove', e => {
+                const t = e.touches[0], rect = jw.getBoundingClientRect();
+                let dx = t.clientX - (rect.left + 60), dy = t.clientY - (rect.top + 60);
+                const dist = Math.min(Math.sqrt(dx*dx+dy*dy), 50);
+                const angle = Math.atan2(dy, dx);
+                joyData.x = (Math.cos(angle)*dist)/50; joyData.y = (Math.sin(angle)*dist)/50;
+                js.style.transform = `translate(calc(-50% + ${Math.cos(angle)*dist}px), calc(-50% + ${Math.sin(angle)*dist}px))`;
+            });
+            jw.addEventListener('touchend', () => { joyActive = false; joyData = {x:0, y:0}; js.style.transform = 'translate(-50%, -50%)'; });
+
+            // 手機旋轉與點擊
+            document.addEventListener('touchstart', e => {
+                if(!isRunning || controlType!=='mobile' || e.target.closest('#joystick-wrapper')) return;
+                rotateTouch.active = true; rotateTouch.x = e.touches[0].clientX; rotateTouch.y = e.touches[0].clientY;
+                shoot(new THREE.Vector2((e.touches[0].clientX/window.innerWidth)*2-1, -(e.touches[0].clientY/window.innerHeight)*2+1));
+            });
+            document.addEventListener('touchmove', e => {
+                if(!rotateTouch.active) return;
+                camera.rotation.y -= (e.touches[0].clientX - rotateTouch.x) * 0.005;
+                camera.rotation.x -= (e.touches[0].clientY - rotateTouch.y) * 0.005;
+                camera.rotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, camera.rotation.x));
+                rotateTouch.x = e.touches[0].clientX; rotateTouch.y = e.touches[0].clientY;
+            });
+            document.addEventListener('touchend', () => rotateTouch.active = false);
+        }
+
+        function startGame(mode) {
+            controlType = mode; Sfx.init(); isRunning = true;
+            document.getElementById('start-screen').style.display = 'none';
+            if(mode==='pc') { document.body.requestPointerLock(); document.getElementById('main-crosshair').style.display='block'; }
+            else document.getElementById('joystick-wrapper').style.display='block';
+        }
+
+        function createTextTexture(text, isSign=false) {
+            const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = isSign ? '#ffffff' : '#f9a825'; ctx.fillRect(0,0,256,128);
+            ctx.fillStyle = isSign ? '#2e7d32' : '#ffffff'; ctx.font = 'bold 80px Arial';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, 128, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function spawnRobot() {
+            const a = Math.floor(Math.random()*9)+1, b = Math.floor(Math.random()*9)+1;
+            const ans = a + b, opts = [ans, ans+1, ans-1].sort(() => Math.random()-0.5);
+            
+            const g = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.8), new THREE.MeshStandardMaterial({color: 0x81c784}));
+            body.position.y = 1.1; g.add(body);
+            
+            const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.7), new THREE.MeshBasicMaterial({map: createTextTexture(`${a}+${b}=?`, true)}));
+            sign.position.set(0, 2.2, 0); g.add(sign);
+
+            opts.forEach((v, i) => {
+                const btn = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.1), new THREE.MeshStandardMaterial({map: createTextTexture(v.toString())}));
+                btn.position.set(0, 1.5 - i*0.4, 0.41); btn.userData = { val: v }; g.add(btn);
+            });
+
+            const ang = Math.random()*Math.PI*2, dist = 15;
+            g.position.set(Math.cos(ang)*dist, 0, Math.sin(ang)*dist);
+            g.userData = { correct: ans }; scene.add(g); robots.push(g);
+        }
+
+        function shoot(coords) {
+            Sfx.play(400, 'triangle', 0.05);
+            const ray = new THREE.Raycaster(); ray.setFromCamera(coords, camera);
+            const hits = ray.intersectObjects(robots, true);
+            if(hits.length > 0) {
+                const obj = hits[0].object;
+                if(obj.userData.val !== undefined) {
+                    const parent = obj.parent;
+                    if(obj.userData.val === parent.userData.correct) {
+                        score += 10; Sfx.play(800); showMsg("答對了! ✨", "#4caf50");
+                        scene.remove(parent); robots = robots.filter(r => r !== parent);
+                    } else {
+                        score = Math.max(0, score-5); Sfx.play(200, 'sawtooth'); showMsg("再試試! ☁️", "#ffa000");
+                    }
+                    document.getElementById('score-val').innerText = `${score} / ${TARGET}`;
+                    if(score >= TARGET) endGame(true);
+                }
+            }
+        }
+
+        function showMsg(t, c) {
+            const m = document.getElementById('msg-flash');
+            m.innerText = t; m.style.color = c; m.style.opacity = 1; m.style.transform = 'translate(-50%, -100%) scale(1.2)';
+            setTimeout(() => { m.style.opacity = 0; m.style.transform = 'translate(-50%, -50%) scale(1)'; }, 800);
+        }
+
+        function endGame(win) {
+            isRunning = false; document.getElementById('end-screen').style.display='flex';
+            document.getElementById('end-title').innerText = win ? "🏆 挑戰成功" : "👻 能源耗盡";
+            document.getElementById('end-msg').innerText = win ? "你真是數學小天才！" : "沒關係，下次會更棒！";
+            if(document.pointerLockElement) document.exitPointerLock();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if(!isRunning) return;
+            const dt = clock.getDelta();
+            
+            // 移動處理
+            let velZ = 0, velX = 0;
+            if(controlType==='pc') { velZ = (moveF?1:0)-(moveB?1:0); velX = (moveR?1:0)-(moveL?1:0); }
+            else { velX = joyData.x; velZ = -joyData.y; }
+            camera.translateX(velX * 8 * dt); camera.translateZ(-velZ * 8 * dt);
+            camera.position.y = 1.6;
+
+            // 機器人生成與行為
+            spawnTimer += dt; if(spawnTimer > 3 && robots.length < 5) { spawnRobot(); spawnTimer = 0; }
+            robots.forEach(r => {
+                const dir = new THREE.Vector3().subVectors(camera.position, r.position).normalize();
+                r.position.add(dir.multiplyScalar(0.8 * dt)); r.position.y = 0;
+                r.lookAt(camera.position.x, 0, camera.position.z);
+                if(r.position.distanceTo(camera.position) < 1.5) {
+                    health -= 0.1; document.getElementById('health-val').innerText = Math.ceil(health) + "%";
+                    if(health <= 0) endGame(false);
+                }
+            });
+            renderer.render(scene, camera);
+        }
+        init(); animate();
+    </script>
+</body>
+</html>
